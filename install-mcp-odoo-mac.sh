@@ -17,12 +17,12 @@ echo "uvx trouve : $UVX_PATH"
 echo ""
 
 # 2. Demander les identifiants Odoo
-read -rp "Nom du serveur MCP (ex: odoo) [odoo] : " MCP_NAME
+read -rp "Nom du serveur MCP (ex: odoo) [odoo] : " MCP_NAME </dev/tty
 MCP_NAME="${MCP_NAME:-odoo}"
-read -rp "URL Odoo (ex: https://nalios.odoo.com) : " ODOO_URL
-read -rp "Nom de la base de donnees : " ODOO_DB
-read -rp "Email / utilisateur Odoo : " ODOO_USER
-read -rsp "Cle API Odoo : " ODOO_API_KEY
+read -rp "URL Odoo (ex: https://nalios.odoo.com) : " ODOO_URL </dev/tty
+read -rp "Nom de la base de donnees : " ODOO_DB </dev/tty
+read -rp "Email / utilisateur Odoo : " ODOO_USER </dev/tty
+read -rsp "Cle API Odoo : " ODOO_API_KEY </dev/tty
 echo ""
 echo ""
 
