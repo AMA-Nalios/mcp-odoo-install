@@ -2,6 +2,11 @@
 # Edite directement les fichiers de config JSON (pas besoin de la CLI `claude`)
 $ErrorActionPreference = "Stop"
 
+# Force TLS 1.2 (necessaire sur Windows PowerShell 5.1 pour acceder a astral.sh/github.com)
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+
+function Install-McpOdoo {
+
 Write-Host "=== Installation MCP Server Odoo ==="
 Write-Host ""
 
@@ -14,7 +19,7 @@ if (-not $uvx) {
     $uvx = Get-Command uvx -ErrorAction SilentlyContinue
     if (-not $uvx) {
         Write-Host "Erreur : uvx introuvable apres installation. Redemarre le terminal et relance ce script."
-        exit 1
+        return
     }
 }
 $uvxPath = $uvx.Source
@@ -111,3 +116,14 @@ if (Test-Path $claudeCodeConfig) {
 Write-Host ""
 Write-Host "=== Termine ==="
 Write-Host "Redemarre Claude Desktop et Claude Code pour activer le serveur MCP '$mcpName'."
+
+}
+
+try {
+    Install-McpOdoo
+} catch {
+    Write-Host ""
+    Write-Host "Erreur : $_"
+}
+Write-Host ""
+Read-Host "Appuie sur Entree pour fermer cette fenetre" | Out-Null
