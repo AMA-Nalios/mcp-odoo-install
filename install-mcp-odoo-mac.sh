@@ -17,6 +17,12 @@ echo "uvx trouve : $UVX_PATH"
 echo ""
 
 # 2. Demander les identifiants Odoo
+echo "Pour info :"
+echo "  - URL Odoo : l'adresse de votre instance (ex: https://nalios.odoo.com)"
+echo "  - Base de donnees : visible dans le selecteur de base au login, ou dans l'URL"
+echo "  - Email / utilisateur : votre identifiant de connexion Odoo"
+echo "  - Cle API : Odoo > votre profil (en haut a droite) > Compte > Securite du compte > Nouvelle cle API"
+echo ""
 read -rp "Nom du serveur MCP (ex: odoo) [odoo] : " MCP_NAME </dev/tty
 MCP_NAME="${MCP_NAME:-odoo}"
 read -rp "URL Odoo (ex: https://nalios.odoo.com) : " ODOO_URL </dev/tty

@@ -22,6 +22,12 @@ Write-Host "uvx trouve : $uvxPath"
 Write-Host ""
 
 # 2. Demander les identifiants Odoo
+Write-Host "Pour info :"
+Write-Host "  - URL Odoo : l'adresse de votre instance (ex: https://nalios.odoo.com)"
+Write-Host "  - Base de donnees : visible dans le selecteur de base au login, ou dans l'URL"
+Write-Host "  - Email / utilisateur : votre identifiant de connexion Odoo"
+Write-Host "  - Cle API : Odoo > votre profil (en haut a droite) > Compte > Securite du compte > Nouvelle cle API"
+Write-Host ""
 $mcpName = Read-Host "Nom du serveur MCP (ex: odoo) [odoo]"
 if ([string]::IsNullOrWhiteSpace($mcpName)) { $mcpName = "odoo" }
 $odooUrl = Read-Host "URL Odoo (ex: https://nalios.odoo.com)"
