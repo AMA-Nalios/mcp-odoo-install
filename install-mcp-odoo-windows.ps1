@@ -22,6 +22,8 @@ Write-Host "uvx trouve : $uvxPath"
 Write-Host ""
 
 # 2. Demander les identifiants Odoo
+$mcpName = Read-Host "Nom du serveur MCP (ex: odoo) [odoo]"
+if ([string]::IsNullOrWhiteSpace($mcpName)) { $mcpName = "odoo" }
 $odooUrl = Read-Host "URL Odoo (ex: https://nalios.odoo.com)"
 $odooDb = Read-Host "Nom de la base de donnees"
 $odooUser = Read-Host "Email / utilisateur Odoo"
@@ -74,10 +76,10 @@ function Update-McpConfig {
         }
     }
 
-    if ($config.mcpServers.PSObject.Properties.Name.Contains("odoo")) {
-        $config.mcpServers.odoo = $odooEntry
+    if ($config.mcpServers.PSObject.Properties.Name.Contains($mcpName)) {
+        $config.mcpServers.$mcpName = $odooEntry
     } else {
-        $config.mcpServers | Add-Member -MemberType NoteProperty -Name odoo -Value $odooEntry
+        $config.mcpServers | Add-Member -MemberType NoteProperty -Name $mcpName -Value $odooEntry
     }
 
     $config | ConvertTo-Json -Depth 10 | Set-Content $ConfigPath -Encoding UTF8
@@ -102,4 +104,4 @@ if (Test-Path $claudeCodeConfig) {
 
 Write-Host ""
 Write-Host "=== Termine ==="
-Write-Host "Redemarre Claude Desktop et Claude Code pour activer le serveur MCP 'odoo'."
+Write-Host "Redemarre Claude Desktop et Claude Code pour activer le serveur MCP '$mcpName'."

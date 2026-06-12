@@ -17,6 +17,8 @@ echo "uvx trouve : $UVX_PATH"
 echo ""
 
 # 2. Demander les identifiants Odoo
+read -rp "Nom du serveur MCP (ex: odoo) [odoo] : " MCP_NAME
+MCP_NAME="${MCP_NAME:-odoo}"
 read -rp "URL Odoo (ex: https://nalios.odoo.com) : " ODOO_URL
 read -rp "Nom de la base de donnees : " ODOO_DB
 read -rp "Email / utilisateur Odoo : " ODOO_USER
@@ -35,10 +37,10 @@ update_config() {
         echo "{}" > "$config_path"
     fi
 
-    python3 - "$config_path" "$UVX_PATH" "$ODOO_URL" "$ODOO_DB" "$ODOO_USER" "$ODOO_API_KEY" "$include_type" "$label" <<'EOF'
+    python3 - "$config_path" "$UVX_PATH" "$ODOO_URL" "$ODOO_DB" "$ODOO_USER" "$ODOO_API_KEY" "$include_type" "$label" "$MCP_NAME" <<'EOF'
 import json, sys
 
-config_path, uvx_path, url, db, user, api_key, include_type, label = sys.argv[1:9]
+config_path, uvx_path, url, db, user, api_key, include_type, label, mcp_name = sys.argv[1:10]
 
 with open(config_path) as f:
     config = json.load(f)
@@ -61,7 +63,7 @@ entry = {
 if include_type == "1":
     entry = {"type": "stdio", **entry}
 
-config["mcpServers"]["odoo"] = entry
+config["mcpServers"][mcp_name] = entry
 
 with open(config_path, "w") as f:
     json.dump(config, f, indent=2)
@@ -88,4 +90,4 @@ fi
 
 echo ""
 echo "=== Termine ==="
-echo "Redemarre Claude Desktop et Claude Code pour activer le serveur MCP 'odoo'."
+echo "Redemarre Claude Desktop et Claude Code pour activer le serveur MCP '$MCP_NAME'."
