@@ -22,7 +22,7 @@ function Find-Uvx {
 function Install-Uv {
     Write-Host "uvx non trouve, installation de uv..."
     try {
-        $installScript = (Invoke-WebRequest -Uri "https://astral.sh/uv/install.ps1" -UseBasicParsing).Content
+        $installScript = (New-Object System.Net.WebClient).DownloadString("https://astral.sh/uv/install.ps1")
         Invoke-Expression $installScript
     } catch {
         Write-Host "Erreur pendant le telechargement/installation de uv :"
