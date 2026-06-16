@@ -67,7 +67,6 @@ function Install-Uv {
 function Update-McpConfig {
     param(
         [string]$ConfigPath,
-        [bool]$IncludeType,
         [string]$Label,
         [string]$UvxPath,
         [string]$McpName,
@@ -118,19 +117,10 @@ function Update-McpConfig {
         ODOO_MCP_MAX_LIMIT     = "1000"
     }
 
-    if ($IncludeType) {
-        $odooEntry = [PSCustomObject]@{
-            type    = "stdio"
-            command = $UvxPath
-            args    = @("mcp-server-odoo@0.4.0")
-            env     = $envBlock
-        }
-    } else {
-        $odooEntry = [PSCustomObject]@{
-            command = $UvxPath
-            args    = @("mcp-server-odoo@0.4.0")
-            env     = $envBlock
-        }
+    $odooEntry = [PSCustomObject]@{
+        command = $UvxPath
+        args    = @("mcp-server-odoo@0.4.0")
+        env     = $envBlock
     }
 
     if ($null -ne $config.mcpServers.PSObject.Properties[$McpName]) {
@@ -227,20 +217,16 @@ function Install-McpOdoo {
         }
     }
     if ($desktopConfig) {
-        Update-McpConfig -ConfigPath $desktopConfig -IncludeType $false -Label "Claude Desktop" @updateArgs
-    }
-
-    # Claude Code (config utilisateur globale)
-    $claudeCodeConfig = "$env:USERPROFILE\.claude.json"
-    if (Test-Path $claudeCodeConfig) {
-        Update-McpConfig -ConfigPath $claudeCodeConfig -IncludeType $true -Label "Claude Code" @updateArgs
-    } else {
-        Write-Host "Config Claude Code non trouvee ($claudeCodeConfig) - etape ignoree."
+        Update-McpConfig -ConfigPath $desktopConfig -Label "Claude Desktop" @updateArgs
     }
 
     Write-Host ""
     Write-Host "=== Termine ==="
-    Write-Host "Redemarre Claude Desktop et Claude Code pour activer le serveur MCP '$mcpName'."
+    if ($desktopConfig) {
+        Write-Host "Redemarre Claude Desktop pour activer le serveur MCP '$mcpName'."
+    } else {
+        Write-Host "Aucune config Claude Desktop mise a jour."
+    }
 }
 
 try {
