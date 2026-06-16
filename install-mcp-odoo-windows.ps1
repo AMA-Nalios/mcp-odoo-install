@@ -22,10 +22,14 @@ function Find-Uvx {
 function Install-Uv {
     Write-Host "uvx non trouve, installation de uv..."
     try {
-        $installScript = (New-Object System.Net.WebClient).DownloadString("https://astral.sh/uv/install.ps1")
-        Invoke-Expression $installScript
+        # Lance l'installeur dans un processus enfant pour eviter que son "exit" ferme notre session
+        & powershell.exe -NoProfile -Command "(New-Object System.Net.WebClient).DownloadString('https://astral.sh/uv/install.ps1') | Invoke-Expression"
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "L'installation de uv a echoue (code de sortie : $LASTEXITCODE)."
+            return $false
+        }
     } catch {
-        Write-Host "Erreur pendant le telechargement/installation de uv :"
+        Write-Host "Erreur pendant l'installation de uv :"
         Write-Host $_.Exception.Message
         return $false
     }
