@@ -7,15 +7,21 @@
 function Refresh-Path {
     $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
     $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    $env:Path = "$machinePath;$userPath;$env:USERPROFILE\.local\bin"
+    $env:Path = "$machinePath;$userPath;$env:USERPROFILE\.local\bin;$env:LOCALAPPDATA\uv\bin"
 }
 
 function Find-Uvx {
     Refresh-Path
     $cmd = Get-Command uvx -ErrorAction SilentlyContinue
     if ($cmd) { return $cmd.Source }
-    $fallback = "$env:USERPROFILE\.local\bin\uvx.exe"
-    if (Test-Path $fallback) { return $fallback }
+    $candidates = @(
+        "$env:USERPROFILE\.local\bin\uvx.exe",
+        "$env:LOCALAPPDATA\uv\bin\uvx.exe",
+        "$env:APPDATA\uv\bin\uvx.exe"
+    )
+    foreach ($path in $candidates) {
+        if (Test-Path $path) { return $path }
+    }
     return $null
 }
 
@@ -116,8 +122,15 @@ function Install-McpOdoo {
         if (-not $uvxPath) {
             Write-Host ""
             Write-Host "Erreur : uvx introuvable apres installation."
-            Write-Host "Verifie que ce dossier contient uvx.exe : $env:USERPROFILE\.local\bin"
-            Write-Host "Sinon, redemarre PowerShell (pour rafraichir le PATH) et relance ce script."
+            Write-Host "Emplacements verifies :"
+            @(
+                "$env:USERPROFILE\.local\bin\uvx.exe",
+                "$env:LOCALAPPDATA\uv\bin\uvx.exe",
+                "$env:APPDATA\uv\bin\uvx.exe"
+            ) | ForEach-Object { Write-Host "  $_ -> $(if (Test-Path $_) { 'TROUVE' } else { 'absent' })" }
+            Write-Host ""
+            Write-Host "Essaie manuellement : winget install astral-sh.uv -e"
+            Write-Host "puis redemarre PowerShell et relance ce script."
             return
         }
     }
