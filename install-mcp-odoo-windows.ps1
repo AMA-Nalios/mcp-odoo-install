@@ -85,22 +85,27 @@ function Update-McpConfig {
         "{}" | Set-Content $ConfigPath -Encoding UTF8
     }
 
-    $rawContent = Get-Content $ConfigPath -Raw
+    $rawContent = (Get-Content $ConfigPath -Raw -ErrorAction SilentlyContinue) -as [string]
+    if ([string]::IsNullOrWhiteSpace($rawContent)) { $rawContent = "{}" }
+
     try {
         $config = $rawContent | ConvertFrom-Json
     } catch {
-        Write-Host "Avertissement : $ConfigPath contient du JSON invalide, reinitialisation."
+        Write-Host "Avertissement : $ConfigPath invalide, reinitialisation."
         $config = $null
     }
-    if (-not $config -or $config -isnot [PSCustomObject]) {
-        $config = New-Object PSObject
+    if ($null -eq $config -or $config -isnot [PSCustomObject]) {
+        $config = [PSCustomObject]@{}
     }
-    $hasMcpServers = $config.PSObject.Properties.Name.Contains("mcpServers")
-    if (-not $hasMcpServers -or $config.mcpServers -isnot [PSCustomObject]) {
-        if ($hasMcpServers) {
+
+    # Utilise l'indexeur PSObject.Properties["key"] pour eviter les problemes
+    # de member enumeration (.Name.Contains) en PS 5.1 sur de gros objets
+    if ($null -eq $config.PSObject.Properties["mcpServers"] -or
+        $config.mcpServers -isnot [PSCustomObject]) {
+        if ($null -ne $config.PSObject.Properties["mcpServers"]) {
             $config.PSObject.Properties.Remove("mcpServers")
         }
-        $config | Add-Member -MemberType NoteProperty -Name mcpServers -Value (New-Object PSObject)
+        Add-Member -InputObject $config -MemberType NoteProperty -Name "mcpServers" -Value ([PSCustomObject]@{})
     }
 
     $envBlock = [PSCustomObject]@{
@@ -128,10 +133,10 @@ function Update-McpConfig {
         }
     }
 
-    if ($config.mcpServers.PSObject.Properties.Name.Contains($McpName)) {
+    if ($null -ne $config.mcpServers.PSObject.Properties[$McpName]) {
         $config.mcpServers.$McpName = $odooEntry
     } else {
-        $config.mcpServers | Add-Member -MemberType NoteProperty -Name $McpName -Value $odooEntry
+        Add-Member -InputObject $config.mcpServers -MemberType NoteProperty -Name $McpName -Value $odooEntry
     }
 
     $config | ConvertTo-Json -Depth 10 | Set-Content $ConfigPath -Encoding UTF8
