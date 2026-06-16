@@ -19,6 +19,9 @@ function Find-Uvx {
         "$env:LOCALAPPDATA\uv\bin\uvx.exe",
         "$env:APPDATA\uv\bin\uvx.exe"
     )
+    # Chercher aussi dans les dossiers Scripts de toutes les installations Python connues
+    Get-ChildItem "$env:LOCALAPPDATA\Programs\Python" -ErrorAction SilentlyContinue |
+        ForEach-Object { $candidates += "$($_.FullName)\Scripts\uvx.exe" }
     foreach ($path in $candidates) {
         if (Test-Path $path) { return $path }
     }
@@ -26,17 +29,36 @@ function Find-Uvx {
 }
 
 function Install-Uv {
-    Write-Host "uvx non trouve, installation de uv..."
+    Write-Host "uvx non trouve, tentative d'installation de uv..."
+
+    # Methode 1 : pip install uv (fiable en environnement avec Python, meme derriere un proxy)
+    $pip = Get-Command pip -ErrorAction SilentlyContinue
+    if ($pip) {
+        Write-Host "Python/pip detecte, tentative via pip..."
+        & pip install uv --quiet
+        if ($LASTEXITCODE -eq 0) { Write-Host "uv installe via pip."; return $true }
+        Write-Host "pip install uv a echoue (code $LASTEXITCODE), essai suivant..."
+    }
+
+    # Methode 2 : winget
+    $winget = Get-Command winget -ErrorAction SilentlyContinue
+    if ($winget) {
+        Write-Host "winget detecte, tentative via winget..."
+        & winget install astral-sh.uv -e --silent --accept-package-agreements --accept-source-agreements
+        if ($LASTEXITCODE -eq 0) { Write-Host "uv installe via winget."; return $true }
+        Write-Host "winget a echoue (code $LASTEXITCODE), essai suivant..."
+    }
+
+    # Methode 3 : installeur officiel astral.sh (dans un processus enfant)
+    Write-Host "Tentative via l'installeur officiel astral.sh..."
     try {
-        # Lance l'installeur dans un processus enfant pour eviter que son "exit" ferme notre session
         & powershell.exe -NoProfile -Command "(New-Object System.Net.WebClient).DownloadString('https://astral.sh/uv/install.ps1') | Invoke-Expression"
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "L'installation de uv a echoue (code de sortie : $LASTEXITCODE)."
+            Write-Host "Installeur astral.sh a echoue (code $LASTEXITCODE)."
             return $false
         }
     } catch {
-        Write-Host "Erreur pendant l'installation de uv :"
-        Write-Host $_.Exception.Message
+        Write-Host "Erreur installeur astral.sh : $($_.Exception.Message)"
         return $false
     }
     return $true
