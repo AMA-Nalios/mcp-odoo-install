@@ -85,7 +85,16 @@ function Update-McpConfig {
         "{}" | Set-Content $ConfigPath -Encoding UTF8
     }
 
-    $config = Get-Content $ConfigPath -Raw | ConvertFrom-Json
+    $rawContent = Get-Content $ConfigPath -Raw
+    try {
+        $config = $rawContent | ConvertFrom-Json
+    } catch {
+        Write-Host "Avertissement : $ConfigPath contient du JSON invalide, reinitialisation."
+        $config = $null
+    }
+    if (-not $config -or $config -isnot [PSCustomObject]) {
+        $config = New-Object PSObject
+    }
     if (-not $config.PSObject.Properties.Name.Contains("mcpServers")) {
         $config | Add-Member -MemberType NoteProperty -Name mcpServers -Value (New-Object PSObject)
     }
