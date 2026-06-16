@@ -205,10 +205,29 @@ function Install-McpOdoo {
 
     # Claude Desktop
     $desktopConfig = "$env:APPDATA\Claude\claude_desktop_config.json"
-    if (Test-Path "$env:APPDATA\Claude") {
+    if (-not (Test-Path "$env:APPDATA\Claude")) {
+        # Chercher dans d'autres emplacements connus
+        $altDesktop = @(
+            "$env:LOCALAPPDATA\Claude\claude_desktop_config.json",
+            "$env:USERPROFILE\AppData\Local\Claude\claude_desktop_config.json"
+        ) | Where-Object { Test-Path (Split-Path -Parent $_) } | Select-Object -First 1
+        if ($altDesktop) {
+            $desktopConfig = $altDesktop
+            Write-Host "Claude Desktop trouve a un emplacement alternatif : $desktopConfig"
+        } else {
+            Write-Host "Claude Desktop non detecte automatiquement."
+            Write-Host "Pour trouver le chemin : ouvre Claude Desktop > Parametres (roue dentee) > Developpeur > Modifier la configuration"
+            Write-Host "Le fichier s'ouvre dans un editeur - copie son chemin depuis la barre de titre."
+            $customPath = Read-Host "Chemin vers claude_desktop_config.json (laisser vide pour ignorer)"
+            if (-not [string]::IsNullOrWhiteSpace($customPath)) {
+                $desktopConfig = $customPath.Trim('"')
+            } else {
+                $desktopConfig = $null
+            }
+        }
+    }
+    if ($desktopConfig) {
         Update-McpConfig -ConfigPath $desktopConfig -IncludeType $false -Label "Claude Desktop" @updateArgs
-    } else {
-        Write-Host "Claude Desktop non detecte ($desktopConfig) - etape ignoree."
     }
 
     # Claude Code (config utilisateur globale)
