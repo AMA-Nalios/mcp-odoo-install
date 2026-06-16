@@ -95,7 +95,11 @@ function Update-McpConfig {
     if (-not $config -or $config -isnot [PSCustomObject]) {
         $config = New-Object PSObject
     }
-    if (-not $config.PSObject.Properties.Name.Contains("mcpServers")) {
+    $hasMcpServers = $config.PSObject.Properties.Name.Contains("mcpServers")
+    if (-not $hasMcpServers -or $config.mcpServers -isnot [PSCustomObject]) {
+        if ($hasMcpServers) {
+            $config.PSObject.Properties.Remove("mcpServers")
+        }
         $config | Add-Member -MemberType NoteProperty -Name mcpServers -Value (New-Object PSObject)
     }
 
