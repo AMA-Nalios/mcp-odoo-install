@@ -1,6 +1,6 @@
 #!/bin/bash
-# Installation du serveur MCP Odoo (mcp-server-odoo) pour Claude Desktop et Claude Code
-# Edite directement les fichiers de config JSON (pas besoin de la CLI `claude`)
+# Installation du serveur MCP Odoo (mcp-server-odoo) pour Claude Desktop
+# Edite directement le fichier de config JSON (pas besoin de la CLI `claude`)
 set -euo pipefail
 
 echo "=== Installation MCP Server Odoo ==="
@@ -32,28 +32,27 @@ read -rsp "Cle API Odoo : " ODOO_API_KEY </dev/tty
 echo ""
 echo ""
 
-# 3. Mettre a jour les fichiers de config (Claude Desktop + Claude Code)
+# 3. Mettre a jour la config Claude Desktop
 update_config() {
     local config_path="$1"
-    local include_type="$2"
-    local label="$3"
+    local label="$2"
 
     mkdir -p "$(dirname "$config_path")"
     if [ ! -f "$config_path" ]; then
         echo "{}" > "$config_path"
     fi
 
-    python3 - "$config_path" "$UVX_PATH" "$ODOO_URL" "$ODOO_DB" "$ODOO_USER" "$ODOO_API_KEY" "$include_type" "$label" "$MCP_NAME" <<'EOF'
+    python3 - "$config_path" "$UVX_PATH" "$ODOO_URL" "$ODOO_DB" "$ODOO_USER" "$ODOO_API_KEY" "$label" "$MCP_NAME" <<'EOF'
 import json, sys
 
-config_path, uvx_path, url, db, user, api_key, include_type, label, mcp_name = sys.argv[1:10]
+config_path, uvx_path, url, db, user, api_key, label, mcp_name = sys.argv[1:9]
 
 with open(config_path) as f:
     config = json.load(f)
 
 config.setdefault("mcpServers", {})
 
-entry = {
+config["mcpServers"][mcp_name] = {
     "command": uvx_path,
     "args": ["mcp-server-odoo@0.4.0"],
     "env": {
@@ -66,10 +65,6 @@ entry = {
         "ODOO_MCP_MAX_LIMIT": "1000",
     },
 }
-if include_type == "1":
-    entry = {"type": "stdio", **entry}
-
-config["mcpServers"][mcp_name] = entry
 
 with open(config_path, "w") as f:
     json.dump(config, f, indent=2)
@@ -81,19 +76,11 @@ EOF
 # Claude Desktop
 DESKTOP_CONFIG="$HOME/Library/Application Support/Claude/claude_desktop_config.json"
 if [ -d "$HOME/Library/Application Support/Claude" ]; then
-    update_config "$DESKTOP_CONFIG" "0" "Claude Desktop"
+    update_config "$DESKTOP_CONFIG" "Claude Desktop"
 else
     echo "Claude Desktop non detecte ($DESKTOP_CONFIG) - etape ignoree."
 fi
 
-# Claude Code (config utilisateur globale)
-CLAUDE_CODE_CONFIG="$HOME/.claude.json"
-if [ -f "$CLAUDE_CODE_CONFIG" ]; then
-    update_config "$CLAUDE_CODE_CONFIG" "1" "Claude Code"
-else
-    echo "Config Claude Code non trouvee ($CLAUDE_CODE_CONFIG) - etape ignoree."
-fi
-
 echo ""
 echo "=== Termine ==="
-echo "Redemarre Claude Desktop et Claude Code pour activer le serveur MCP '$MCP_NAME'."
+echo "Redemarre Claude Desktop pour activer le serveur MCP '$MCP_NAME'."
