@@ -1,239 +1,169 @@
-# Installation du serveur MCP Odoo (mcp-server-odoo) pour Claude Desktop et Claude Code
-# Edite directement les fichiers de config JSON (pas besoin de la CLI `claude`)
+# Installation du serveur MCP Odoo (mcp-server-odoo) pour Claude Desktop
+# Usage : irm https://raw.githubusercontent.com/AMA-Nalios/mcp-odoo-install/main/install-mcp-odoo-windows.ps1 | iex
 
-# Force TLS 1.2 (necessaire sur Windows PowerShell 5.1 pour acceder a astral.sh/github.com)
+# Force TLS 1.2 (necessaire sur Windows PowerShell 5.1)
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
-function Refresh-Path {
-    $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
-    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    $env:Path = "$machinePath;$userPath;$env:USERPROFILE\.local\bin;$env:LOCALAPPDATA\uv\bin"
-}
-
-function Find-Uvx {
-    Refresh-Path
-    $cmd = Get-Command uvx -ErrorAction SilentlyContinue
-    if ($cmd) { return $cmd.Source }
-    $candidates = @(
-        "$env:USERPROFILE\.local\bin\uvx.exe",
-        "$env:LOCALAPPDATA\uv\bin\uvx.exe",
-        "$env:APPDATA\uv\bin\uvx.exe"
-    )
-    # Chercher aussi dans les dossiers Scripts de toutes les installations Python connues
-    Get-ChildItem "$env:LOCALAPPDATA\Programs\Python" -ErrorAction SilentlyContinue |
-        ForEach-Object { $candidates += "$($_.FullName)\Scripts\uvx.exe" }
-    foreach ($path in $candidates) {
-        if (Test-Path $path) { return $path }
+function Find-ClaudeDesktopConfig {
+    # Installeur classique
+    if (Test-Path "$env:APPDATA\Claude") {
+        return "$env:APPDATA\Claude\claude_desktop_config.json"
+    }
+    # Microsoft Store (Claude_pzs8sxrjxfjjc ou variante)
+    $pkg = Get-ChildItem "$env:LOCALAPPDATA\Packages" -Filter "Claude_*" -ErrorAction SilentlyContinue |
+           Select-Object -First 1
+    if ($pkg) {
+        $msPath = "$($pkg.FullName)\LocalCache\Roaming\Claude"
+        if (Test-Path $msPath) {
+            return "$msPath\claude_desktop_config.json"
+        }
     }
     return $null
 }
 
-function Install-Uv {
-    Write-Host "uvx non trouve, tentative d'installation de uv..."
+function Find-Uvx {
+    $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
+    $userPath    = [Environment]::GetEnvironmentVariable("Path", "User")
+    $env:Path    = "$machinePath;$userPath;$env:USERPROFILE\.local\bin;$env:LOCALAPPDATA\uv\bin"
 
-    # Methode 1 : pip install uv (fiable en environnement avec Python, meme derriere un proxy)
+    $cmd = Get-Command uvx -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+
+    foreach ($p in @(
+        "$env:USERPROFILE\.local\bin\uvx.exe",
+        "$env:LOCALAPPDATA\uv\bin\uvx.exe"
+    )) { if (Test-Path $p) { return $p } }
+
+    return $null
+}
+
+function Install-Uv {
+    Write-Host "uvx non trouve, installation de uv..."
+
     $pip = Get-Command pip -ErrorAction SilentlyContinue
     if ($pip) {
-        Write-Host "Python/pip detecte, tentative via pip..."
+        Write-Host "pip detecte, tentative via pip..."
         & pip install uv --quiet
         if ($LASTEXITCODE -eq 0) { Write-Host "uv installe via pip."; return $true }
-        Write-Host "pip install uv a echoue (code $LASTEXITCODE), essai suivant..."
     }
 
-    # Methode 2 : winget
     $winget = Get-Command winget -ErrorAction SilentlyContinue
     if ($winget) {
         Write-Host "winget detecte, tentative via winget..."
         & winget install astral-sh.uv -e --silent --accept-package-agreements --accept-source-agreements
         if ($LASTEXITCODE -eq 0) { Write-Host "uv installe via winget."; return $true }
-        Write-Host "winget a echoue (code $LASTEXITCODE), essai suivant..."
     }
 
-    # Methode 3 : installeur officiel astral.sh (dans un processus enfant)
     Write-Host "Tentative via l'installeur officiel astral.sh..."
-    try {
-        & powershell.exe -NoProfile -Command "(New-Object System.Net.WebClient).DownloadString('https://astral.sh/uv/install.ps1') | Invoke-Expression"
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "Installeur astral.sh a echoue (code $LASTEXITCODE)."
-            return $false
-        }
-    } catch {
-        Write-Host "Erreur installeur astral.sh : $($_.Exception.Message)"
-        return $false
-    }
-    return $true
+    # Lance dans un sous-processus pour eviter que le exit de l'installeur ferme notre session
+    & powershell.exe -NoProfile -Command "(New-Object System.Net.WebClient).DownloadString('https://astral.sh/uv/install.ps1') | Invoke-Expression"
+    return ($LASTEXITCODE -eq 0)
 }
 
-function Update-McpConfig {
-    param(
-        [string]$ConfigPath,
-        [string]$Label,
-        [string]$UvxPath,
-        [string]$McpName,
-        [string]$OdooUrl,
-        [string]$OdooDb,
-        [string]$OdooUser,
-        [string]$OdooApiKey
-    )
+function Update-Config {
+    param([string]$ConfigPath, [string]$Label)
 
-    $dir = Split-Path -Parent $ConfigPath
-    if (-not (Test-Path $dir)) {
-        New-Item -ItemType Directory -Path $dir -Force | Out-Null
-    }
-    if (-not (Test-Path $ConfigPath)) {
-        "{}" | Set-Content $ConfigPath -Encoding UTF8
-    }
+    $dir = Split-Path $ConfigPath
+    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    if (-not (Test-Path $ConfigPath)) { '{}' | Set-Content $ConfigPath -Encoding UTF8 }
 
-    $rawContent = (Get-Content $ConfigPath -Raw -ErrorAction SilentlyContinue) -as [string]
-    if ([string]::IsNullOrWhiteSpace($rawContent)) { $rawContent = "{}" }
+    $raw = (Get-Content $ConfigPath -Raw -ErrorAction SilentlyContinue) -as [string]
+    if ([string]::IsNullOrWhiteSpace($raw)) { $raw = '{}' }
 
-    try {
-        $config = $rawContent | ConvertFrom-Json
-    } catch {
-        Write-Host "Avertissement : $ConfigPath invalide, reinitialisation."
-        $config = $null
-    }
-    if ($null -eq $config -or $config -isnot [PSCustomObject]) {
-        $config = [PSCustomObject]@{}
-    }
+    try { $config = $raw | ConvertFrom-Json }
+    catch { $config = [PSCustomObject]@{} }
 
-    # Utilise l'indexeur PSObject.Properties["key"] pour eviter les problemes
-    # de member enumeration (.Name.Contains) en PS 5.1 sur de gros objets
-    if ($null -eq $config.PSObject.Properties["mcpServers"] -or
-        $config.mcpServers -isnot [PSCustomObject]) {
-        if ($null -ne $config.PSObject.Properties["mcpServers"]) {
-            $config.PSObject.Properties.Remove("mcpServers")
-        }
+    if ($null -eq $config -or $config -isnot [PSCustomObject]) { $config = [PSCustomObject]@{} }
+
+    if ($null -eq $config.PSObject.Properties["mcpServers"] -or $config.mcpServers -isnot [PSCustomObject]) {
+        if ($null -ne $config.PSObject.Properties["mcpServers"]) { $config.PSObject.Properties.Remove("mcpServers") }
         Add-Member -InputObject $config -MemberType NoteProperty -Name "mcpServers" -Value ([PSCustomObject]@{})
     }
 
-    $envBlock = [PSCustomObject]@{
-        ODOO_URL               = $OdooUrl
-        ODOO_DB                = $OdooDb
-        ODOO_USER              = $OdooUser
-        ODOO_API_KEY           = $OdooApiKey
-        ODOO_YOLO              = "true"
-        ODOO_MCP_DEFAULT_LIMIT = "100"
-        ODOO_MCP_MAX_LIMIT     = "1000"
-    }
-
-    $odooEntry = [PSCustomObject]@{
-        command = $UvxPath
+    $entry = [PSCustomObject]@{
+        command = $uvxPath
         args    = @("mcp-server-odoo@0.4.0")
-        env     = $envBlock
+        env     = [PSCustomObject]@{
+            ODOO_URL               = $odooUrl
+            ODOO_DB                = $odooDB
+            ODOO_USER              = $odooUser
+            ODOO_API_KEY           = $odooApiKey
+            ODOO_YOLO              = "true"
+            ODOO_MCP_DEFAULT_LIMIT = "100"
+            ODOO_MCP_MAX_LIMIT     = "1000"
+        }
     }
 
-    if ($null -ne $config.mcpServers.PSObject.Properties[$McpName]) {
-        $config.mcpServers.$McpName = $odooEntry
+    if ($null -ne $config.mcpServers.PSObject.Properties[$mcpName]) {
+        $config.mcpServers.$mcpName = $entry
     } else {
-        Add-Member -InputObject $config.mcpServers -MemberType NoteProperty -Name $McpName -Value $odooEntry
+        Add-Member -InputObject $config.mcpServers -MemberType NoteProperty -Name $mcpName -Value $entry
     }
 
     $config | ConvertTo-Json -Depth 10 | Set-Content $ConfigPath -Encoding UTF8
     Write-Host "$Label mis a jour : $ConfigPath"
 }
 
-function Install-McpOdoo {
-    $ErrorActionPreference = "Stop"
-    Write-Host "=== Installation MCP Server Odoo ==="
+function Main {
+    Write-Host "=== Installation MCP Server Odoo ===" -ForegroundColor Cyan
     Write-Host ""
 
-    # 1. Verifier/installer uv (fournit uvx)
-    $uvxPath = Find-Uvx
+    # 1. uvx
+    $script:uvxPath = Find-Uvx
     if (-not $uvxPath) {
         if (-not (Install-Uv)) {
             Write-Host ""
-            Write-Host "Impossible d'installer uv automatiquement."
-            Write-Host "Essaie manuellement : winget install astral-sh.uv -e"
-            Write-Host "puis redemarre PowerShell et relance ce script."
+            Write-Host "Impossible d'installer uv. Essaie manuellement : winget install astral-sh.uv -e"
             return
         }
-        $uvxPath = Find-Uvx
+        $script:uvxPath = Find-Uvx
         if (-not $uvxPath) {
-            Write-Host ""
             Write-Host "Erreur : uvx introuvable apres installation."
-            Write-Host "Emplacements verifies :"
-            @(
-                "$env:USERPROFILE\.local\bin\uvx.exe",
-                "$env:LOCALAPPDATA\uv\bin\uvx.exe",
-                "$env:APPDATA\uv\bin\uvx.exe"
-            ) | ForEach-Object { Write-Host "  $_ -> $(if (Test-Path $_) { 'TROUVE' } else { 'absent' })" }
-            Write-Host ""
-            Write-Host "Essaie manuellement : winget install astral-sh.uv -e"
-            Write-Host "puis redemarre PowerShell et relance ce script."
             return
         }
     }
     Write-Host "uvx trouve : $uvxPath"
     Write-Host ""
 
-    # 2. Demander les identifiants Odoo
+    # 2. Identifiants Odoo
     Write-Host "Pour info :"
-    Write-Host "  - URL Odoo : l'adresse de votre instance (ex: https://nalios.odoo.com)"
+    Write-Host "  - URL Odoo        : l'adresse de votre instance (ex: https://nalios.odoo.com)"
     Write-Host "  - Base de donnees : visible dans le selecteur de base au login, ou dans l'URL"
-    Write-Host "  - Email / utilisateur : votre identifiant de connexion Odoo"
-    Write-Host "  - Cle API : Odoo > votre profil (en haut a droite) > Compte > Securite du compte > Nouvelle cle API"
+    Write-Host "  - Email / user    : votre identifiant de connexion Odoo"
+    Write-Host "  - Cle API         : Odoo > profil > Compte > Securite du compte > Nouvelle cle API"
     Write-Host ""
-    $mcpName = Read-Host "Nom du serveur MCP (ex: odoo) [odoo]"
-    if ([string]::IsNullOrWhiteSpace($mcpName)) { $mcpName = "odoo" }
-    $odooUrl = Read-Host "URL Odoo (ex: https://nalios.odoo.com)"
-    $odooDb = Read-Host "Nom de la base de donnees"
-    $odooUser = Read-Host "Email / utilisateur Odoo"
-    $odooApiKeySecure = Read-Host "Cle API Odoo" -AsSecureString
-    $odooApiKey = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($odooApiKeySecure))
+    $script:mcpName  = Read-Host "Nom du serveur MCP [odoo]"
+    if (-not $mcpName) { $script:mcpName = "odoo" }
+    $script:odooUrl  = Read-Host "URL Odoo (ex: https://nalios.odoo.com)"
+    $script:odooDB   = Read-Host "Nom de la base de donnees"
+    $script:odooUser = Read-Host "Email / utilisateur Odoo"
+    $secure          = Read-Host "Cle API Odoo" -AsSecureString
+    $script:odooApiKey = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+    )
     Write-Host ""
 
-    # 3. Mettre a jour les configs (Claude Desktop + Claude Code)
-    $updateArgs = @{
-        UvxPath    = $uvxPath
-        McpName    = $mcpName
-        OdooUrl    = $odooUrl
-        OdooDb     = $odooDb
-        OdooUser   = $odooUser
-        OdooApiKey = $odooApiKey
-    }
-
-    # Claude Desktop
-    $desktopConfig = "$env:APPDATA\Claude\claude_desktop_config.json"
-    if (-not (Test-Path "$env:APPDATA\Claude")) {
-        # Chercher dans d'autres emplacements connus
-        $altDesktop = @(
-            "$env:LOCALAPPDATA\Claude\claude_desktop_config.json",
-            "$env:USERPROFILE\AppData\Local\Claude\claude_desktop_config.json"
-        ) | Where-Object { Test-Path (Split-Path -Parent $_) } | Select-Object -First 1
-        if ($altDesktop) {
-            $desktopConfig = $altDesktop
-            Write-Host "Claude Desktop trouve a un emplacement alternatif : $desktopConfig"
-        } else {
-            Write-Host "Claude Desktop non detecte automatiquement."
-            Write-Host "Pour trouver le chemin : ouvre Claude Desktop > Parametres (roue dentee) > Developpeur > Modifier la configuration"
-            Write-Host "Le fichier s'ouvre dans un editeur - copie son chemin depuis la barre de titre."
-            $customPath = Read-Host "Chemin vers claude_desktop_config.json (laisser vide pour ignorer)"
-            if (-not [string]::IsNullOrWhiteSpace($customPath)) {
-                $desktopConfig = $customPath.Trim('"')
-            } else {
-                $desktopConfig = $null
-            }
-        }
-    }
-    if ($desktopConfig) {
-        Update-McpConfig -ConfigPath $desktopConfig -Label "Claude Desktop" @updateArgs
-    }
-
-    Write-Host ""
-    Write-Host "=== Termine ==="
-    if ($desktopConfig) {
-        Write-Host "Redemarre Claude Desktop pour activer le serveur MCP '$mcpName'."
+    # 3. Claude Desktop
+    $configPath = Find-ClaudeDesktopConfig
+    if ($configPath) {
+        Update-Config -ConfigPath $configPath -Label "Claude Desktop"
     } else {
-        Write-Host "Aucune config Claude Desktop mise a jour."
+        Write-Host "Claude Desktop non detecte automatiquement."
+        Write-Host "Pour trouver le chemin : Claude Desktop > Parametres > Developpeur > Modifier la configuration"
+        $custom = Read-Host "Chemin vers claude_desktop_config.json (vide pour ignorer)"
+        if ($custom) { Update-Config -ConfigPath $custom.Trim('"') -Label "Claude Desktop" }
     }
+
+    Write-Host ""
+    Write-Host "=== Termine ===" -ForegroundColor Green
+    Write-Host "Redemarre Claude Desktop pour activer le serveur MCP '$mcpName'."
 }
 
 try {
-    Install-McpOdoo
+    Main
 } catch {
     Write-Host ""
-    Write-Host "Erreur inattendue : $($_.Exception.Message)"
+    Write-Host "Erreur : $($_.Exception.Message)" -ForegroundColor Red
 }
 Write-Host ""
-Read-Host "Appuie sur Entree pour fermer cette fenetre" | Out-Null
+Read-Host "Appuie sur Entree pour fermer" | Out-Null
