@@ -123,6 +123,17 @@ function Main {
         }
     }
     Write-Host "uvx trouve : $uvxPath"
+
+    # Pre-installer Python 3.12 via uv pour eviter le telechargement au premier lancement
+    Write-Host "Pre-installation de Python 3.12 via uv (peut prendre quelques instants)..."
+    & $uvxPath --help 2>&1 | Out-Null  # s'assure que uv est initialise
+    $uvBin = Split-Path $uvxPath
+    $uvExe = Join-Path $uvBin "uv.exe"
+    if (Test-Path $uvExe) {
+        & $uvExe python install 3.12 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) { Write-Host "Python 3.12 installe." }
+        else { Write-Host "Python 3.12 deja present ou telechargement ignore." }
+    }
     Write-Host ""
 
     # 2. Identifiants Odoo
