@@ -108,6 +108,23 @@ function Main {
     Write-Host "=== Installation MCP Server Odoo ===" -ForegroundColor Cyan
     Write-Host ""
 
+    # 0. Config Claude Desktop (verifie en premier pour eviter de tout faire pour rien)
+    $script:configPath = Find-ClaudeDesktopConfig
+    if (-not $configPath) {
+        Write-Host "Claude Desktop non detecte automatiquement." -ForegroundColor Yellow
+        Write-Host "Pour trouver le chemin : Claude Desktop > Parametres > Developpeur > Modifier la configuration"
+        $custom = Read-Host "Chemin vers claude_desktop_config.json (vide pour annuler)"
+        if ($custom) {
+            $script:configPath = $custom.Trim('"')
+        } else {
+            Write-Host ""
+            Write-Host "Installation annulee : impossible de localiser la config Claude Desktop." -ForegroundColor Red
+            return
+        }
+    }
+    Write-Host "Config Claude Desktop trouvee : $configPath"
+    Write-Host ""
+
     # 1. uvx
     $script:uvxPath = Find-Uvx
     if (-not $uvxPath) {
@@ -155,15 +172,7 @@ function Main {
     Write-Host ""
 
     # 3. Claude Desktop
-    $configPath = Find-ClaudeDesktopConfig
-    if ($configPath) {
-        Update-Config -ConfigPath $configPath -Label "Claude Desktop"
-    } else {
-        Write-Host "Claude Desktop non detecte automatiquement."
-        Write-Host "Pour trouver le chemin : Claude Desktop > Parametres > Developpeur > Modifier la configuration"
-        $custom = Read-Host "Chemin vers claude_desktop_config.json (vide pour ignorer)"
-        if ($custom) { Update-Config -ConfigPath $custom.Trim('"') -Label "Claude Desktop" }
-    }
+    Update-Config -ConfigPath $configPath -Label "Claude Desktop"
 
     Write-Host ""
     Write-Host "=== Termine ===" -ForegroundColor Green
