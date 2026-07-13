@@ -62,13 +62,6 @@ function Find-Uvx {
 function Install-Uv {
     Write-Host "uvx non trouve, installation de uv..."
 
-    $pip = Get-Command pip -ErrorAction SilentlyContinue
-    if ($pip) {
-        Write-Host "pip detecte, tentative via pip..."
-        & pip install uv --quiet
-        if ($LASTEXITCODE -eq 0) { Write-Host "uv installe via pip."; return $true }
-    }
-
     $winget = Get-Command winget -ErrorAction SilentlyContinue
     if ($winget) {
         Write-Host "winget detecte, tentative via winget..."
