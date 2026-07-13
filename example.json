@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "nalios": {
+      "command": "/Users/XXX/.local/bin/uvx",
+      "args": [
+        "mcp-server-odoo@0.4.0"
+      ],
+      "env": {
+        "ODOO_URL": "https://nalios.odoo.com",
+        "ODOO_DB": "mynalios-nalios-main-11001328",
+        "ODOO_USER": "xxx@xxxx.xxxx",
+        "ODOO_API_KEY": "XXXX",
+        "ODOO_YOLO": "true",
+        "ODOO_MCP_DEFAULT_LIMIT": "100",
+        "ODOO_MCP_MAX_LIMIT": "1000"
+      }
+    }
+  }
+}

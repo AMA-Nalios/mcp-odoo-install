@@ -1,5 +1,8 @@
 # Installation du serveur MCP Odoo (mcp-server-odoo) pour Claude Desktop
 # Usage : irm https://raw.githubusercontent.com/AMA-Nalios/mcp-odoo-install/main/install-mcp-odoo-windows.ps1 | iex
+# Usage (test de la generation JSON, sans toucher a la vraie config) : .\install-mcp-odoo-windows.ps1 -Test
+
+param([switch]$Test)
 
 # Force TLS 1.2 (necessaire sur Windows PowerShell 5.1)
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
@@ -21,6 +24,20 @@ function Find-ClaudeDesktopConfig {
     return $null
 }
 
+# Isolee dans sa propre fonction (parametre explicite) pour pouvoir la tester
+# independamment du PATH reel de la machine (cf. Test-ConfigGeneration).
+function Find-UvxInWinGetPackages {
+    param([string]$LocalAppData)
+
+    $wingetPkg = Get-ChildItem "$LocalAppData\Microsoft\WinGet\Packages" -Filter "astral-sh.uv_*" -Directory -ErrorAction SilentlyContinue |
+                 Select-Object -First 1
+    if ($wingetPkg) {
+        $p = Join-Path $wingetPkg.FullName "uvx.exe"
+        if (Test-Path $p) { return $p }
+    }
+    return $null
+}
+
 function Find-Uvx {
     $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
     $userPath    = [Environment]::GetEnvironmentVariable("Path", "User")
@@ -31,8 +48,13 @@ function Find-Uvx {
 
     foreach ($p in @(
         "$env:USERPROFILE\.local\bin\uvx.exe",
-        "$env:LOCALAPPDATA\uv\bin\uvx.exe"
+        "$env:LOCALAPPDATA\uv\bin\uvx.exe",
+        "$env:LOCALAPPDATA\Microsoft\WinGet\Links\uvx.exe"
     )) { if (Test-Path $p) { return $p } }
+
+    # Installe via winget : chemin non ajoute au PATH avant relance de session, on cherche dans le dossier Packages
+    $p = Find-UvxInWinGetPackages -LocalAppData $env:LOCALAPPDATA
+    if ($p) { return $p }
 
     return $null
 }
@@ -60,12 +82,21 @@ function Install-Uv {
     return ($LASTEXITCODE -eq 0)
 }
 
+# Windows PowerShell 5.1 ecrit un BOM UTF-8 avec Set-Content -Encoding UTF8, ce que le
+# parseur JSON de Claude Desktop n'accepte pas (il reinitialise alors le fichier de config
+# au demarrage). On force donc un UTF-8 sans BOM via .NET.
+function Write-Utf8NoBom {
+    param([string]$Path, [string]$Content)
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($Path, $Content, $utf8NoBom)
+}
+
 function Update-Config {
     param([string]$ConfigPath, [string]$Label)
 
     $dir = Split-Path $ConfigPath
     if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
-    if (-not (Test-Path $ConfigPath)) { '{}' | Set-Content $ConfigPath -Encoding UTF8 }
+    if (-not (Test-Path $ConfigPath)) { Write-Utf8NoBom -Path $ConfigPath -Content '{}' }
 
     $raw = (Get-Content $ConfigPath -Raw -ErrorAction SilentlyContinue) -as [string]
     if ([string]::IsNullOrWhiteSpace($raw)) { $raw = '{}' }
@@ -100,8 +131,95 @@ function Update-Config {
         Add-Member -InputObject $config.mcpServers -MemberType NoteProperty -Name $mcpName -Value $entry
     }
 
-    $config | ConvertTo-Json -Depth 10 | Set-Content $ConfigPath -Encoding UTF8
+    $json = $config | ConvertTo-Json -Depth 10
+
+    # Validation : round-trip du JSON genere pour s'assurer qu'il est bien forme
+    # avant d'ecraser la config existante (evite de crasher Claude Desktop au demarrage)
+    try {
+        $reparsed = $json | ConvertFrom-Json
+        if ($reparsed.mcpServers.$mcpName.command -ne $uvxPath) {
+            throw "le chemin de commande ne correspond pas apres relecture du JSON"
+        }
+    } catch {
+        Write-Host "Erreur : le JSON genere pour $Label est invalide, ecriture annulee ($($_.Exception.Message))" -ForegroundColor Red
+        return
+    }
+
+    Write-Utf8NoBom -Path $ConfigPath -Content $json
     Write-Host "$Label mis a jour : $ConfigPath"
+}
+
+function Test-ConfigGeneration {
+    Write-Host "=== Test de generation (fausses infos, Find-Uvx reellement execute) ===" -ForegroundColor Cyan
+    Write-Host ""
+
+    # Reproduit le cas qui a fait planter Claude Desktop : uvx installe via WinGet
+    # (pas dans le PATH ni les emplacements par defaut), nom d'utilisateur accentue.
+    $tmpRoot   = Join-Path $env:TEMP "mcp-odoo-test"
+    $tmpConfig = Join-Path $tmpRoot "test_claude_desktop_config.json"
+    if (Test-Path $tmpRoot) { Remove-Item $tmpRoot -Recurse -Force }
+    New-Item -ItemType Directory -Path $tmpRoot -Force | Out-Null
+
+    # Fausse arborescence WinGet avec un utilisateur accentue, comme sur la machine de Clemence
+    $fakeLocalAppData = Join-Path $tmpRoot "ClémencedeWouters\AppData\Local"
+    $fakePkgDir = Join-Path $fakeLocalAppData "Microsoft\WinGet\Packages\astral-sh.uv_Microsoft.Winget.Source_8wekyb3d8bbwe"
+    New-Item -ItemType Directory -Path $fakePkgDir -Force | Out-Null
+    New-Item -ItemType File -Path (Join-Path $fakePkgDir "uvx.exe") -Force | Out-Null
+
+    # NB : on teste directement Find-UvxInWinGetPackages, pas Find-Uvx en entier.
+    # Sous Windows, [Environment]::GetEnvironmentVariable("Path","Machine"/"User") lit le
+    # registre systeme ; hors Windows (donc sur ce Mac), ces scopes n'existent pas et
+    # GetEnvironmentVariable retombe sur le PATH reel du process, ce qui ferait
+    # remonter le vrai uvx de la machine et fausserait le test. La partie PATH/PATH par
+    # defaut de Find-Uvx ne peut donc etre validee de maniere fiable que sur un vrai Windows.
+    $script:uvxPath = Find-UvxInWinGetPackages -LocalAppData $fakeLocalAppData
+
+    $expectedUvxPath = Join-Path $fakePkgDir "uvx.exe"
+    if ($uvxPath -ne $expectedUvxPath) {
+        Write-Host "Echec : Find-UvxInWinGetPackages a renvoye '$uvxPath' au lieu de '$expectedUvxPath'." -ForegroundColor Red
+        Remove-Item $tmpRoot -Recurse -Force -ErrorAction SilentlyContinue
+        return
+    }
+    Write-Host "OK : Find-UvxInWinGetPackages a bien detecte le chemin WinGet calcule :" -ForegroundColor Green
+    Write-Host "  $uvxPath"
+    Write-Host "(le fallback PATH/USERPROFILE de Find-Uvx n'est pas testable de facon fiable hors Windows)" -ForegroundColor DarkGray
+    Write-Host ""
+
+    $script:mcpName    = "odoo"
+    $script:odooUrl    = "https://exemple.odoo.com"
+    $script:odooDB     = "exemple-db"
+    $script:odooUser   = "test@exemple.com"
+    $script:odooApiKey = "fake-api-key-1234567890"
+
+    Update-Config -ConfigPath $tmpConfig -Label "Test"
+
+    if (-not (Test-Path $tmpConfig)) {
+        Write-Host "Echec : le fichier de test n'a pas ete cree." -ForegroundColor Red
+        Remove-Item $tmpRoot -Recurse -Force -ErrorAction SilentlyContinue
+        return
+    }
+
+    $bytes = [System.IO.File]::ReadAllBytes($tmpConfig)
+    if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+        Write-Host "Echec : le fichier ecrit contient un BOM UTF-8 (Claude Desktop risque de crasher au parsing)." -ForegroundColor Red
+    } else {
+        Write-Host "OK : pas de BOM UTF-8 en tete de fichier." -ForegroundColor Green
+    }
+
+    try {
+        $reparsed = Get-Content $tmpConfig -Raw | ConvertFrom-Json
+        $cmd = $reparsed.mcpServers.odoo.command
+        if ($cmd -ne $uvxPath) {
+            Write-Host "Echec : le chemin relu ($cmd) ne correspond pas au chemin calcule ($uvxPath)." -ForegroundColor Red
+        } else {
+            Write-Host "OK : JSON valide, chemin de commande calcule par Find-Uvx correctement echappe et relu :" -ForegroundColor Green
+            Write-Host "  $cmd"
+        }
+    } catch {
+        Write-Host "Echec : JSON invalide genere ($($_.Exception.Message))" -ForegroundColor Red
+    } finally {
+        Remove-Item $tmpRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }
 
 function Main {
@@ -180,7 +298,7 @@ function Main {
 }
 
 try {
-    Main
+    if ($Test) { Test-ConfigGeneration } else { Main }
 } catch {
     Write-Host ""
     Write-Host "Erreur : $($_.Exception.Message)" -ForegroundColor Red
