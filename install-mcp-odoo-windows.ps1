@@ -276,10 +276,9 @@ function Main {
     $script:odooUrl  = Read-Host "URL Odoo (ex: https://nalios.odoo.com)"
     $script:odooDB   = Read-Host "Nom de la base de donnees"
     $script:odooUser = Read-Host "Email / utilisateur Odoo"
-    $secure          = Read-Host "Cle API Odoo" -AsSecureString
-    $script:odooApiKey = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
-        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
-    )
+    # Pas de -AsSecureString : la console Windows gere mal le collage en mode masque
+    # (bracketed paste), ce qui ne recupere qu'un seul caractere au lieu de la cle complete.
+    $script:odooApiKey = Read-Host "Cle API Odoo"
     Write-Host ""
 
     # 3. Claude Desktop
