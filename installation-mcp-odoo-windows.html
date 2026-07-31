@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Installation MCP Odoo - Windows</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+    color: #1a1d21;
+    background: #fff;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 32px;
+    line-height: 1.6;
+    font-size: 14px;
+  }
+  header {
+    border-bottom: 3px solid #0dc9ae;
+    padding-bottom: 18px;
+    margin-bottom: 34px;
+  }
+  header img { height: 34px; vertical-align: middle; margin-right: 16px; }
+  header h1 {
+    display: inline-block;
+    vertical-align: middle;
+    font-size: 18px;
+    margin: 0;
+    color: #1a1d21;
+    font-weight: 600;
+  }
+  header p { margin: 4px 0 0 50px; font-size: 12px; color: #667085; }
+  h2 {
+    font-size: 14px;
+    color: #0f766e;
+    margin: 36px 0 12px;
+  }
+  h2 .num { margin-right: 8px; vertical-align: middle; }
+  .num {
+    display: inline-block;
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    line-height: 22px;
+    text-align: center;
+    border-radius: 50%;
+    background: #0dc9ae;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  p { margin: 10px 0; }
+  code {
+    background: #f1f5f9;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 12.5px;
+    font-family: "SF Mono", Consolas, monospace;
+  }
+  code.winkey svg { fill: #1a1d21; vertical-align: -1px; }
+  pre {
+    background: #16181c;
+    color: #5de9d1;
+    padding: 14px 16px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-family: "SF Mono", Consolas, monospace;
+    overflow-x: auto;
+    margin: 12px 0;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .callout {
+    border-left: 3px solid #f59e0b;
+    background: #fffbeb;
+    padding: 10px 14px;
+    border-radius: 0 6px 6px 0;
+    font-size: 12.5px;
+    margin: 12px 0;
+  }
+  .callout strong { color: #92400e; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+    margin: 12px 0;
+  }
+  table td {
+    padding: 8px 10px;
+    border: 1px solid #e2e8f0;
+    vertical-align: top;
+  }
+  table td:first-child {
+    width: 30%;
+    font-weight: 600;
+    background: #f8fafc;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <img src="data:image/png;base64,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" alt="Nalios">
+  <div>
+    <h1>Installation de l'assistant Odoo pour Claude</h1>
+    <p>Guide rapide — Windows</p>
+  </div>
+</header>
+
+<p>Ce guide installe et configure automatiquement la connexion entre Claude Desktop et votre instance Odoo. L'ensemble prend moins de deux minutes.</p>
+
+<h2><span class="num">1</span> Ouvrir PowerShell</h2>
+<p>Appuie sur <code class="winkey"><svg viewBox="0 0 88 88" width="11" height="11"><rect x="4" y="4" width="38" height="38"/><rect x="46" y="4" width="38" height="38"/><rect x="4" y="46" width="38" height="38"/><rect x="46" y="46" width="38" height="38"/></svg></code> + <code>R</code>, tape <code>powershell</code>, puis <code>Entrée</code>.</p>
+
+<h2><span class="num">2</span> Coller la commande d'installation</h2>
+<p>Dans la fenêtre PowerShell qui s'ouvre, colle cette commande puis appuie sur <code>Entrée</code> :</p>
+<pre>irm https://raw.githubusercontent.com/AMA-Nalios/mcp-odoo-install/main/install-mcp-odoo-windows.ps1 | iex</pre>
+
+<h2><span class="num">3</span> Répondre aux questions</h2>
+<p>Le script installe automatiquement les outils nécessaires puis demande les informations suivantes :</p>
+<table>
+  <tr><td>URL Odoo</td><td>Adresse de ton instance, ex. <code>https://nalios.odoo.com</code></td></tr>
+  <tr><td>Base de données</td><td>Visible dans le sélecteur de base au login, ou dans l'URL</td></tr>
+  <tr><td>Email / utilisateur</td><td>Ton identifiant de connexion Odoo</td></tr>
+  <tr><td>Clé API</td><td>Odoo &gt; profil &gt; Compte &gt; Sécurité du compte &gt; Nouvelle clé API</td></tr>
+</table>
+
+<h2><span class="num">4</span> Redémarrer Claude Desktop</h2>
+<p>Une fois le script terminé ("=== Termine ==="), redémarre entièrement Claude Desktop pour activer le serveur MCP.</p>
+<div class="callout">
+  <strong>Important :</strong> fermer la fenêtre ne suffit pas — Claude Desktop reste actif en arrière-plan. Ouvre le Gestionnaire des tâches (<code>Ctrl</code> + <code>Maj</code> + <code>Échap</code>), trouve <code>Claude</code>, clique sur <code>Fin de tâche</code>, puis relance l'application.
+</div>
+
+<h2>En cas de problème</h2>
+<p>Si le script échoue ou si Claude Desktop n'est pas détecté automatiquement, contacte le support Nalios : <code>ama@nalios.be</code>.</p>
+
+</body>
+</html>

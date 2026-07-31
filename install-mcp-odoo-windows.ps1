@@ -1,6 +1,13 @@
 # Installation du serveur MCP Odoo (mcp-server-odoo) pour Claude Desktop
 # Usage : irm https://raw.githubusercontent.com/AMA-Nalios/mcp-odoo-install/main/install-mcp-odoo-windows.ps1 | iex
 # Usage (test de la generation JSON, sans toucher a la vraie config) : .\install-mcp-odoo-windows.ps1 -Test
+#
+# Notes fiabilite Windows :
+#  - UV_LINK_MODE=copy : evite le verrou de fichier (os error 32) lors de l'install de pywin32
+#    (uv hard-linke des .pyd mappes en memoire -> Windows refuse de supprimer le temporaire).
+#  - Pre-install de mcp-server-odoo a l'installation : Claude Desktop ne fait AUCUNE install
+#    au lancement (plus de race pywin32 / plus d'echec au premier demarrage).
+#  - Les args du serveur incluent "--python 3.12" pour taper exactement le meme cache que le pre-install.
 
 param([switch]$Test)
 
@@ -75,6 +82,28 @@ function Install-Uv {
     return ($LASTEXITCODE -eq 0)
 }
 
+# Pre-installe mcp-server-odoo dans le cache uv (copy mode + retry + purge builds-v0)
+# pour que Claude Desktop n'ait RIEN a installer au lancement -> plus d'echec pywin32.
+function Preinstall-McpServerOdoo {
+    param([string]$UvxPath)
+
+    Write-Host "Pre-installation de mcp-server-odoo (30-60s, evite l'erreur pywin32 au 1er lancement)..."
+    $env:UV_LINK_MODE = "copy"
+    for ($i = 1; $i -le 4; $i++) {
+        # --help declenche la resolution + l'install puis rend la main (pas de serveur lance)
+        & $UvxPath --python 3.12 mcp-server-odoo@0.4.0 --help 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "mcp-server-odoo pre-installe (cache chaud)." -ForegroundColor Green
+            return $true
+        }
+        Write-Host "  tentative $i echouee -> purge du cache builds-v0 et nouvel essai..."
+        Remove-Item "$env:LOCALAPPDATA\uv\cache\builds-v0" -Recurse -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+    }
+    Write-Host "Pre-install non confirmee ; Claude Desktop reessaiera au lancement." -ForegroundColor Yellow
+    return $false
+}
+
 # Windows PowerShell 5.1 ecrit un BOM UTF-8 avec Set-Content -Encoding UTF8, ce que le
 # parseur JSON de Claude Desktop n'accepte pas (il reinitialise alors le fichier de config
 # au demarrage). On force donc un UTF-8 sans BOM via .NET.
@@ -106,7 +135,8 @@ function Update-Config {
 
     $entry = [PSCustomObject]@{
         command = $uvxPath
-        args    = @("mcp-server-odoo@0.4.0")
+        # --python 3.12 : meme interpreteur que le pre-install -> cache partage, aucune reinstall au lancement.
+        args    = @("--python", "3.12", "mcp-server-odoo@0.4.0")
         env     = [PSCustomObject]@{
             ODOO_URL               = $odooUrl
             ODOO_DB                = $odooDB
@@ -115,6 +145,8 @@ function Update-Config {
             ODOO_YOLO              = "true"
             ODOO_MCP_DEFAULT_LIMIT = "100"
             ODOO_MCP_MAX_LIMIT     = "1000"
+            # copy au lieu de hard-link : evite le verrou de fichier pywin32 (os error 32) au cas ou.
+            UV_LINK_MODE           = "copy"
         }
     }
 
@@ -148,7 +180,7 @@ function Test-ConfigGeneration {
 
     # Reproduit le cas qui a fait planter Claude Desktop : uvx installe via WinGet
     # (pas dans le PATH ni les emplacements par defaut), nom d'utilisateur accentue.
-    $tmpRoot   = Join-Path $env:TEMP "mcp-odoo-test"
+    $tmpRoot   = Join-Path ([System.IO.Path]::GetTempPath()) "mcp-odoo-test"
     $tmpConfig = Join-Path $tmpRoot "test_claude_desktop_config.json"
     if (Test-Path $tmpRoot) { Remove-Item $tmpRoot -Recurse -Force }
     New-Item -ItemType Directory -Path $tmpRoot -Force | Out-Null
@@ -208,6 +240,18 @@ function Test-ConfigGeneration {
             Write-Host "OK : JSON valide, chemin de commande calcule par Find-Uvx correctement echappe et relu :" -ForegroundColor Green
             Write-Host "  $cmd"
         }
+        # Verifie que les nouveaux champs de fiabilite sont bien presents
+        $a = $reparsed.mcpServers.odoo.args
+        if (($a -contains "--python") -and ($a -contains "3.12")) {
+            Write-Host "OK : args incluent --python 3.12." -ForegroundColor Green
+        } else {
+            Write-Host "Echec : --python 3.12 absent des args." -ForegroundColor Red
+        }
+        if ($reparsed.mcpServers.odoo.env.UV_LINK_MODE -eq "copy") {
+            Write-Host "OK : UV_LINK_MODE=copy present." -ForegroundColor Green
+        } else {
+            Write-Host "Echec : UV_LINK_MODE=copy absent." -ForegroundColor Red
+        }
     } catch {
         Write-Host "Echec : JSON invalide genere ($($_.Exception.Message))" -ForegroundColor Red
     } finally {
@@ -262,6 +306,10 @@ function Main {
         if ($LASTEXITCODE -eq 0) { Write-Host "Python 3.12 installe." }
         else { Write-Host "Python 3.12 deja present ou telechargement ignore." }
     }
+    Write-Host ""
+
+    # 1b. Pre-installer mcp-server-odoo (le vrai fix : rien a installer au lancement de Claude Desktop)
+    Preinstall-McpServerOdoo -UvxPath $uvxPath | Out-Null
     Write-Host ""
 
     # 2. Identifiants Odoo
