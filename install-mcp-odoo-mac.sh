@@ -6,7 +6,24 @@ set -euo pipefail
 echo "=== Installation MCP Server Odoo ==="
 echo ""
 
-# 1. Verifier/installer uv (fournit uvx)
+# 1. Verifier/installer les Xcode Command Line Tools (fournissent python3, git, etc.)
+if ! xcode-select -p &>/dev/null; then
+    echo "Outils de developpement Mac (Xcode Command Line Tools) non trouves, installation..."
+    xcode-select --install
+    echo "Une fenetre va s'ouvrir : cliquez sur 'Installer', puis patientez (peut prendre plusieurs minutes)."
+    until xcode-select -p &>/dev/null; do
+        sleep 5
+    done
+    echo "Outils de developpement installes."
+fi
+echo ""
+
+if ! command -v python3 &>/dev/null; then
+    echo "Erreur : python3 introuvable meme apres l'installation des outils de developpement."
+    exit 1
+fi
+
+# 2. Verifier/installer uv (fournit uvx)
 if ! command -v uvx &>/dev/null; then
     echo "uvx non trouve, installation de uv..."
     curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -16,7 +33,7 @@ UVX_PATH=$(command -v uvx)
 echo "uvx trouve : $UVX_PATH"
 echo ""
 
-# 2. Demander les identifiants Odoo
+# 3. Demander les identifiants Odoo
 echo "Pour info :"
 echo "  - URL Odoo : l'adresse de votre instance (ex: https://nalios.odoo.com)"
 echo "  - Base de donnees : visible dans le selecteur de base au login, ou dans l'URL"
@@ -32,7 +49,7 @@ read -rsp "Cle API Odoo : " ODOO_API_KEY </dev/tty
 echo ""
 echo ""
 
-# 3. Mettre a jour la config Claude Desktop
+# 4. Mettre a jour la config Claude Desktop
 update_config() {
     local config_path="$1"
     local label="$2"
